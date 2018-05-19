@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/signal"
@@ -10,12 +11,15 @@ import (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	r := runner.NewRunner(10)
 	log.Println("main start")
-	r.Start()
+	r.Start(ctx)
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
 	<-sig
-	r.Stop()
+	cancel()
+	r.Wait()
 	log.Println("main stop")
 }

@@ -15,37 +15,31 @@ import (
 // Runner is
 type Runner struct {
 	wg         sync.WaitGroup
-	ctx        context.Context
-	cancel     context.CancelFunc
 	queue      *queue.Queue
 	numWorkers int
 }
 
 // NewRunner is
 func NewRunner(numWorkers int) *Runner {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &Runner{
 		queue:      queue.NewQueue(),
-		ctx:        ctx,
-		cancel:     cancel,
 		numWorkers: numWorkers,
 	}
 }
 
 // Start is
-func (r *Runner) Start() {
-	r.launchWorkers()
-	r.launchServer()
+func (r *Runner) Start(ctx context.Context) {
+	r.launchWorkers(ctx)
+	r.launchServer(ctx)
 }
 
-// Stop is
-func (r *Runner) Stop() {
-	r.cancel()
+// Wait is
+func (r *Runner) Wait() {
 	r.wg.Wait()
 	r.queue.Close()
 }
 
-func (r *Runner) launchWorkers() {
+func (r *Runner) launchWorkers(ctx context.Context) {
 	for i := 0; i < r.numWorkers; i++ {
 		r.wg.Add(1)
 		go func(id int) {
@@ -55,7 +49,7 @@ func (r *Runner) launchWorkers() {
 				select {
 				case item := <-ch:
 					worker.Work(item)
-				case <-r.ctx.Done():
+				case <-ctx.Done():
 					log.Printf("worker %s done\n", worker.Name)
 					r.wg.Done()
 					return
@@ -65,13 +59,13 @@ func (r *Runner) launchWorkers() {
 	}
 }
 
-func (r *Runner) launchServer() {
+func (r *Runner) launchServer(ctx context.Context) {
 	r.wg.Add(1)
 	go func() {
 		server := &server.Server{Queue: r.queue}
 		httpServer := &http.Server{Addr: ":8888", Handler: server}
 		go httpServer.ListenAndServe()
-		<-r.ctx.Done()
+		<-ctx.Done()
 		httpServer.Shutdown(context.Background())
 		log.Println("server done")
 		r.wg.Done()
